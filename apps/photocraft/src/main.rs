@@ -362,6 +362,7 @@ fn main() -> eframe::Result {
         control: control_port,
         auth,
         automation,
+        no_splash,
         mut launch_options,
     } = launch;
 
@@ -506,7 +507,7 @@ fn main() -> eframe::Result {
             let session = Session::new();
             PhotocraftApp::install_type_reset_hooks(&cc.egui_ctx);
             let mut app = PhotocraftApp::new(session, services);
-            if !args.no_splash {
+            if !no_splash {
                 app.enable_splash();
             }
             app.min_frame_ms = uncapped.then_some(1000.0 / 240.0);
