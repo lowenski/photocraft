@@ -181,16 +181,11 @@ impl PhotocraftApp {
             ctx.request_repaint();
         }
 
-        if let Some(splash) = &mut self.splash {
-            if splash.is_active(now) {
-                splash.show(&ctx, ui);
-                self.automation_input = false;
-                self.finish_frame(0.0);
-                return;
-            } else {
-                self.splash = None;
-                ctx.request_repaint();
-            }
+        if let Some(splash) = &mut self.splash
+            && !splash.is_active(now)
+        {
+            self.splash = None;
+            ctx.request_repaint();
         }
         let t0 = gpu_canvas::now_ms();
         self.perf.stage.ui_start(t0, frame.info().cpu_usage);
@@ -348,6 +343,12 @@ impl PhotocraftApp {
         }
         if self.custom_titlebar {
             titlebar::resize_zones(ui);
+        }
+        if let Some(splash) = &mut self.splash {
+            let now = ctx.input(|i| i.time);
+            if splash.is_active(now) {
+                splash.show(&ctx, ui);
+            }
         }
         // A device lost while drawing this frame: switch to the CPU canvas before the next one.
         gpu_status::check(self, &ctx);

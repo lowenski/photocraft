@@ -85,7 +85,7 @@ impl SplashState {
     }
 
     /// Renders the startup splash screen card, release artwork, and animated progress bar.
-    pub fn show(&mut self, ctx: &egui::Context, ui: &mut Ui) {
+    pub fn show(&mut self, ctx: &egui::Context, _ui: &mut Ui) {
         let now = ctx.input(|i| i.time);
         if self.start_time <= 0.0 {
             self.start_time = now;
@@ -109,65 +109,70 @@ impl SplashState {
         ctx.request_repaint_after(std::time::Duration::from_millis(16));
 
         let t = Tokens::get(ctx);
-        let screen_rect = ui.max_rect();
+        let screen = ctx.content_rect();
 
-        // Dark dim backdrop covering the entire window with subtle fade out near end
-        let painter = ui.painter();
-        let bg_alpha = if elapsed > self.duration * 0.85 {
-            let fade = ((self.duration - elapsed) / (self.duration * 0.15)).clamp(0.0, 1.0) as f32;
-            (230.0 * fade) as u8
-        } else {
-            230
-        };
-        painter.rect_filled(screen_rect, CornerRadius::ZERO, Color32::from_black_alpha(bg_alpha));
+        egui::Area::new(egui::Id::unique("photocraft-splash"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(screen.min)
+            .interactable(true)
+            .show(ctx, |ui| {
+                // Clean and transparent scrim: intercepts clicks to skip without painting any dark/black background
+                let (_, scrim_resp) = ui.allocate_exact_size(screen.size(), egui::Sense::click());
+                if scrim_resp.clicked() && elapsed > 0.25 {
+                    self.dismiss();
+                    ctx.request_repaint();
+                    return;
+                }
 
-        // Splash card dimensions: 560 x 400 pt (Artwork: 560 x 312 pt, Footer: 560 x 88 pt)
-        let card_size = vec2(560.0, 400.0);
+                let painter = ui.painter();
 
-        // Center on visible work area or screen rect
-        let visible_area = crate::work_area::visible_rect(ctx);
-        let center = if visible_area.is_finite() && visible_area.width() > 100.0 && visible_area.height() > 100.0 {
-            visible_area.center()
-        } else {
-            screen_rect.center()
-        };
+                // Splash card dimensions: 560 x 400 pt (Artwork: 560 x 312 pt, Footer: 560 x 88 pt)
+                let card_size = vec2(560.0, 400.0);
 
-        // Optical center: adjust slightly upward for visual balance
-        let optical_center = pos2(center.x, center.y - 10.0);
-        let card_rect = Rect::from_center_size(optical_center, card_size);
+                // Center on visible work area or screen rect
+                let visible_area = crate::work_area::visible_rect(ctx);
+                let center = if visible_area.is_finite() && visible_area.width() > 100.0 && visible_area.height() > 100.0 {
+                    visible_area.center()
+                } else {
+                    screen.center()
+                };
 
-        // Multi-layered soft drop shadow
-        for (offset_y, blur, alpha) in [(4.0, 24.0, 30), (2.0, 12.0, 50), (0.0, 4.0, 70)] {
-            let shadow_rect = card_rect.translate(vec2(0.0, offset_y)).expand(blur * 0.5);
-            painter.rect_filled(shadow_rect, CornerRadius::same(14), Color32::from_black_alpha(alpha));
-        }
+                // Optical center: adjust slightly upward for visual balance
+                let optical_center = pos2(center.x, center.y - 10.0);
+                let card_rect = Rect::from_center_size(optical_center, card_size);
 
-        // Splash card background container
-        painter.rect_filled(card_rect, CornerRadius::same(12), t.card);
+                // Multi-layered soft drop shadow to elevate the card cleanly over the workspace
+                for (offset_y, blur, alpha) in [(4.0, 24.0, 30), (2.0, 12.0, 50), (0.0, 4.0, 70)] {
+                    let shadow_rect = card_rect.translate(vec2(0.0, offset_y)).expand(blur * 0.5);
+                    painter.rect_filled(shadow_rect, CornerRadius::same(14), Color32::from_black_alpha(alpha));
+                }
 
-        // Top artwork area (560 x 312 pt)
-        let artwork_height = 312.0;
-        let artwork_rect = Rect::from_min_size(card_rect.min, vec2(card_size.x, artwork_height));
-        let tex = splash_texture(ctx);
-        let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
-        painter.image(tex.id(), artwork_rect, uv, Color32::WHITE);
+                // Splash card background container
+                painter.rect_filled(card_rect, CornerRadius::same(12), t.card);
 
-        // Subtle separator line below artwork
-        let sep_y = card_rect.min.y + artwork_height;
-        painter.line_segment(
-            [pos2(card_rect.min.x, sep_y), pos2(card_rect.max.x, sep_y)],
-            Stroke::new(1.0, t.card_border),
-        );
+                // Top artwork area (560 x 312 pt)
+                let artwork_height = 312.0;
+                let artwork_rect = Rect::from_min_size(card_rect.min, vec2(card_size.x, artwork_height));
+                let tex = splash_texture(ctx);
+                let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+                painter.image(tex.id(), artwork_rect, uv, Color32::WHITE);
 
-        // Card border stroke
-        painter.rect_stroke(card_rect, CornerRadius::same(12), Stroke::new(1.0, t.card_border), egui::StrokeKind::Inside);
+                // Subtle separator line below artwork
+                let sep_y = card_rect.min.y + artwork_height;
+                painter.line_segment(
+                    [pos2(card_rect.min.x, sep_y), pos2(card_rect.max.x, sep_y)],
+                    Stroke::new(1.0, t.card_border),
+                );
 
-        // Footer container (560 x 88 pt)
-        let footer_rect = Rect::from_min_max(
-            pos2(card_rect.min.x + 20.0, sep_y + 12.0),
-            pos2(card_rect.max.x - 20.0, card_rect.max.y - 12.0),
-        );
-        let mut footer_ui = ui.new_child(egui::UiBuilder::new().max_rect(footer_rect));
+                // Card border stroke
+                painter.rect_stroke(card_rect, CornerRadius::same(12), Stroke::new(1.0, t.card_border), egui::StrokeKind::Inside);
+
+                // Footer container (560 x 88 pt)
+                let footer_rect = Rect::from_min_max(
+                    pos2(card_rect.min.x + 20.0, sep_y + 12.0),
+                    pos2(card_rect.max.x - 20.0, card_rect.max.y - 12.0),
+                );
+                let mut footer_ui = ui.new_child(egui::UiBuilder::new().max_rect(footer_rect));
 
         footer_ui.horizontal(|ui| {
             // Left column: Brand + Version + Status line
@@ -221,7 +226,8 @@ impl SplashState {
                 });
             });
         });
-    }
+    });
+}
 }
 
 #[cfg(test)]
